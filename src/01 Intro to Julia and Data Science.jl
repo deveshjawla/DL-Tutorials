@@ -9,7 +9,7 @@
 
 # This is a very brief and rough primer if you're new to Julia and wondering how to do simple things that are relevant for data analysis.
 #
-# # Defining a vector
+# Defining a vector
 
 x = [1, 3.1, 2, 5]
 append!(x, 7)
