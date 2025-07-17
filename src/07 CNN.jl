@@ -14,10 +14,8 @@ filename = joinpath(folder, "lenet.jld2")
 # Calling MLDatasets.MNIST() will dowload the dataset if necessary,
 # and return a struct containing it.
 # It takes a few seconds to read from disk each time, so we do this once:
-
-train_data = CSV.read(joinpath(folder, "mnist_train.csv"), DataFrame)  # i.e. split=:train
-test_data = CSV.read(joinpath(folder, "mnist_test.csv"), DataFrame)
-
+train = CSV.read("src/mnist/mnist_train.csv", DataFrame, header=1)
+test = CSV.read("src/mnist/mnist_test.csv", DataFrame, header=1)
 # train_data.features is a 28×28×60000 Array{Float32, 3} of the images.
 # Flux needs a 4D array (WHCN), with the 3rd dim for channels -- here trivial, grayscale.
 # Combine the reshape needed with other pre-processing:
@@ -145,9 +143,6 @@ for epoch in 1:settings.epochs
 end
 
 #HW TODO - Check why the MLP using Lux.jl was faster than CNN using Flux?
-
-# Compare MLP in FLUX and LUX => which library
-# Compare CNN and MLP in one library => which architecture
 
 @show train_log
 
