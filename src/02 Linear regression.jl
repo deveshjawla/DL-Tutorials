@@ -146,3 +146,50 @@ plot(X.LStat, y, seriestype=:scatter, markershape=:circle, legend=false, size=(8
 plot!(Xnew.LStat, MLJ.predict(mach, Xnew), linewidth=3, color=:orange)
 
 # TODO HW : Find the best model by feature selection; best model means highest R²
+
+import Pkg; Pkg.add("Combinatorics")
+
+using MLJ
+using RDatasets, DataFrames, MLJLinearModels, Combinatorics, Statistics
+
+# Load and prepare the data
+data = dataset("MASS", "Boston")
+data = coerce(data, autotype(data, :discrete_to_continuous))
+y = data.MedV
+X = select(data, Not(:MedV))
+features = names(X)
+
+# Setup model
+model = LinearRegressor()
+
+# Evaluation function
+function get_r2(feat_subset)
+    Xsub = select(X, feat_subset)
+    mach = machine(model, Xsub, y)
+    fit!(mach)
+    ŷ = MLJ.predict(mach, Xsub)
+    return rsquared(ŷ, y)
+end
+
+# Greedy Forward Selection
+best_feats = String[]
+remaining_feats = copy(features)
+best_r2 = -Inf
+
+while !isempty(remaining_feats)
+    r2_list = [(f, get_r2(vcat(best_feats, [f]))) for f in remaining_feats]
+    sorted = sort(r2_list, by=x->x[2], rev=true)
+    (next_feat, next_r2) = first(sorted)
+
+    if next_r2 > best_r2
+        push!(best_feats, next_feat)
+        deleteat!(remaining_feats, findfirst(==(next_feat), remaining_feats))
+        best_r2 = next_r2
+        println("Added: $(next_feat) → R² = $(round(best_r2, sigdigits=5))")
+    else
+        break
+    end
+end
+
+println("\nBest feature set: $(best_feats)")
+println("Highest R² achieved: $(round(best_r2, sigdigits=5))")
