@@ -1,4 +1,4 @@
-# MLPR-202425-Tutorials
+# DL25-Tutorials
  
 Steps:
 

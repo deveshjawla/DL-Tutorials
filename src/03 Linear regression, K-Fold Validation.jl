@@ -122,7 +122,7 @@ rep = report(mtm)
 res = rep.plotting
 rep.best_model
 
-# So the conclusion here is that the ?th order polynomial does quite well.
+# So the conclusion here is that the 5th order polynomial does quite well.
 #
 # In ISL they use a different seed so the results are a bit different but comparable.
 

@@ -16,8 +16,6 @@ models(filter)
 models("XGB")
 measures("F1")
 
-mdls = models(matching(X, y))
-
 # Linear regression
 
 LR = @load LinearRegressor pkg = MLJLinearModels
@@ -47,6 +45,8 @@ data = coerce(data, autotype(data, :discrete_to_continuous))
 y = data.MedV
 X = select(data, Not(:MedV))
 
+mdls = models(matching(X, y))
+
 # Let's declare a simple multivariate linear regression model:
 
 model = LR()
@@ -56,7 +56,8 @@ model = LR()
 X_uni = select(X, :LStat) # only a single feature
 mach_uni = machine(model, X_uni, y)
 fit!(mach_uni)
-
+ŷ = MLJ.predict(mach_uni, X_uni)
+round(rsquared(ŷ, y), sigdigits=4)
 # You can then retrieve the  fitted parameters using `fitted_params`:
 
 fp = fitted_params(mach_uni)
@@ -67,7 +68,7 @@ fp = fitted_params(mach_uni)
 
 using Plots
 
-plot(X.LStat, y, seriestype=:scatter, markershape=:circle, legend=false, size=(800, 600))
+plot(X.LStat, y, seriestype=:scatter, markershape=:circle, legend=false, size=(800, 600), xlabel="LStat")
 
 #  MLJ.predict(mach_uni, Xnew) to predict from a fitted model
 Xnew = (LStat=collect(range(extrema(X.LStat)..., length=100)),)
@@ -95,8 +96,10 @@ round(rsquared(ŷ, y), sigdigits=4)
 # Let's see what the residuals look like
 
 res = ŷ .- y
-plot(res, line=:stem, linewidth=1, marker=:circle, legend=false, size=((800, 600)))
-hline!([0], linewidth=2, color=:red)    # add a horizontal line at x=0
+begin
+    plot(res, line=:stem, linewidth=1, marker=:circle, legend=false, size=((800, 600)))
+    hline!([0], linewidth=2, color=:red)    # add a horizontal line at x=0
+end
 mean(y)
 
 # Maybe that a histogram is more appropriate here
@@ -125,15 +128,15 @@ round(rsquared(ŷ, y), sigdigits=4)
 
 # We get slightly better results but nothing spectacular.
 #
-# Let's get back to the lab where they consider regressing the target variable on `lstat` and `lstat^2`; again, it's essentially a case of defining the right DataFrame:
-
+# Let's consider regressing the target variable on `lstat` and `lstat^2`; again:
+using DataFrames
 X3 = DataFrame(hcat(X.LStat, X.LStat .^ 2), [:LStat, :LStat2])
 mach = machine(model, X3, y)
 fit!(mach)
 ŷ = MLJ.predict(mach, X3)
 round(rsquared(ŷ, y), sigdigits=4)
 
-# fitting y=mx+c to X3 is the same as fitting y=mx2+c to X3.LStat => Polynomial regression
+# fitting y=mx+c to LStat^2 is the same as fitting y=mx2+c to LStat => Polynomial regression
 
 # which again, we can visualise:
 
@@ -141,7 +144,5 @@ Xnew = (LStat=Xnew.LStat, LStat2=Xnew.LStat .^ 2)
 
 plot(X.LStat, y, seriestype=:scatter, markershape=:circle, legend=false, size=(800, 600))
 plot!(Xnew.LStat, MLJ.predict(mach, Xnew), linewidth=3, color=:orange)
-
-
 
 # TODO HW : Find the best model by feature selection; best model means highest R²

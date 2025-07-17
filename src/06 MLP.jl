@@ -69,7 +69,7 @@ train_state = Training.TrainState(model, ps, st, AdamW(lambda=3e-4)) # optimizer
 
 mkpath("./mnist/Lux MLP trained models")
 ### Lets train the model
-nepochs = 100
+nepochs = 10
 train_accuracy, test_accraucy = 0.1, 0.1
 for epoch in 1:nepochs
     ### Training Loop
