@@ -4,6 +4,7 @@
 
 using Flux, JLD2, StatsPlots
 using CSV, DataFrames, Statistics
+using MLDatasets  # Added to generate MNIST data if CSVs are missing
 
 folder = "mnist"  # sub-directory in which to save
 isdir(folder) || mkdir(folder)
@@ -11,24 +12,41 @@ filename = joinpath(folder, "lenet.jld2")
 
 #===== DATA =====#
 
+# Save CSVs if they don't exist
+function save_mnist_csv(split::Symbol, filepath::String)
+    data = MNIST(split)
+    images = Matrix(transpose(reshape(reinterpret(Float32, data.features), 28 * 28, :)))
+    labels = data.targets
+    df = DataFrame(images, :auto)  # FIX: :auto added to support DataFrame(Matrix)
+    rename!(df, Symbol.("x", 1:784))
+    df.label = labels
+    CSV.write(filepath, df)
+end
+
+if !isfile(joinpath(folder, "mnist_train.csv"))
+    save_mnist_csv(:train, joinpath(folder, "mnist_train.csv"))
+end
+if !isfile(joinpath(folder, "mnist_test.csv"))
+    save_mnist_csv(:test, joinpath(folder, "mnist_test.csv"))
+end
+
 # Calling MLDatasets.MNIST() will dowload the dataset if necessary,
 # and return a struct containing it.
 # It takes a few seconds to read from disk each time, so we do this once:
 
-train_data = CSV.read(joinpath(folder, "mnist_train.csv"), DataFrame)  # i.e. split=:train
-test_data = CSV.read(joinpath(folder, "mnist_test.csv"), DataFrame)
+# train_data = CSV.read(joinpath(folder, "mnist_train.csv"), DataFrame)  # i.e. split=:train
+# test_data = CSV.read(joinpath(folder, "mnist_test.csv"), DataFrame)
+train_data = CSV.read("../")
 
 # train_data.features is a 28×28×60000 Array{Float32, 3} of the images.
 # Flux needs a 4D array (WHCN), with the 3rd dim for channels -- here trivial, grayscale.
 # Combine the reshape needed with other pre-processing:
 
-function loader(data::DataFrame; batchsize::Int=512)
-    x4dim = reshape(permutedims(Matrix{Float32}(select(data, Not(:label)))), 28, 28, 1, :)   # insert trivial channel dim
-
-    x4dim = mapslices(x -> reverse(permutedims(x ./ 255), dims=1), x4dim, dims=(1, 2))
-
-    yhot = Flux.onehotbatch(Vector(data.label), 0:9)  # make a 10×60000 OneHotMatrix
-    Flux.DataLoader((x4dim, yhot); batchsize, shuffle=true)
+function loader(data::DataFrame; batchsize::Int = 512)
+	x4dim = reshape(permutedims(Matrix{Float32}(select(data, Not(:label)))), 28, 28, 1, :)   # insert trivial channel dim
+	x4dim = mapslices(x -> reverse(permutedims(x ./ 255), dims = 1), x4dim, dims = (1, 2))
+	yhot = Flux.onehotbatch(Vector(data.label), 0:9)  # make a 10×60000 OneHotMatrix
+	Flux.DataLoader((x4dim, yhot); batchsize, shuffle = true)
 end
 
 loader(train_data)  # returns a DataLoader, with first element a tuple like this:

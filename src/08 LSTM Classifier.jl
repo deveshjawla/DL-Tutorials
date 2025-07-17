@@ -1,4 +1,4 @@
-using Lux, JLD2, Printf, Random, Statistics, MLUtils, Optimisers, Zygote
+using Lux, JLD2, Printf, Random, Statistics, MLUtils, Optimisers, Zygote, Lux.Training
 
 function get_dataloaders(; dataset_size=1000, sequence_length=1000)
     # Create the spirals
@@ -41,7 +41,7 @@ function SpiralClassifier(in_dims, hidden_dims, out_dims)
         Recurrence(LSTMCell(in_dims => hidden_dims)), Dense(hidden_dims => out_dims, sigmoid), vec)
 end
 
-const lossfn = BinaryCrossEntropyLoss()
+ const lossfn = BinaryCrossEntropyLoss()
 
 function compute_loss(model, ps, st, (x, y))
     ŷ, st_ = model(x, ps, st)
@@ -76,22 +76,26 @@ for epoch in 1:5
     # Train the model
     losses = []
     for (x, y) in train_loader
+        y = Float32.(y)  # Ensure y is Float32
         (_, loss, _, train_state) = Training.single_train_step!(
-            AutoZygote(), lossfn, (x, y), train_state)
+            AutoZygote(), compute_loss, (x, y), train_state)
         append!(losses, loss)
     end
     @printf "Epoch [%3d]: Loss %4.5f\n" epoch sum(losses)
 
-    losses = []
+    val_losses = []
     accs = []
     # Validate the model
-    st_ = Lux.testmode(train_state.states)
     for (x, y) in val_loader
-        ŷ, st_ = model(x, train_state.parameters, st_)
-        loss = lossfn(ŷ, y)
-        acc = accuracy(ŷ, y)
-        append!(losses, loss)
-        append!(accs, acc)
-    end
-    @printf "Validation: Loss %4.5f Accuracy %4.5f\n" sum(losses) mean(accs)
+    y = Float32.(y)
+    ŷ, _ = model(x, train_state.parameters, st)
+    loss = lossfn(ŷ, y)
+    acc = accuracy(ŷ, y)
+    push!(val_losses, loss)
+    push!(accs, acc)
 end
+
+@printf "Validation: Loss %4.5f Accuracy %4.5f\n" mean(val_losses) mean(accs)
+
+end     
+
