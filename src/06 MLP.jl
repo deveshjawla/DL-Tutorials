@@ -9,8 +9,8 @@ function flatten(x::AbstractArray)
     return reshape(x, :, size(x)[end])
 end
 
-train = CSV.read("./mnist/mnist_train.csv", DataFrame, header=1)
-test = CSV.read("./mnist/mnist_test.csv", DataFrame, header=1)
+train = CSV.read("src/mnist/mnist_train.csv", DataFrame, header=1)
+test = CSV.read("src/mnist/mnist_test.csv", DataFrame, header=1)
 
 function mnistloader(data::DataFrame, batch_size_)
     x4dim = reshape(permutedims(Matrix{Float32}(select(data, Not(:label)))), 28, 28, 1, :)   # insert trivial channel dim
@@ -46,16 +46,16 @@ tprintln(md"""
 $mean(-\sum y log(ŷ) + \epsilon))$
 """)
 
-function accuracy(model, ps, st, dataloader)
-    total_correct, total = 0, 0
-    st = Lux.testmode(st)
-    for (x, y) in dataloader
-        target_class = onecold(y, 0:9)
-        predicted_class = onecold(Array(first(model(x, ps, st))), 0:9)
-        total_correct += sum(target_class .== predicted_class)
-        total += length(target_class)
+function accuracy_score(model, ps, st, loader)
+    st = Lux.testmode(st)                         # disable dropout, etc.
+    correct = 0; total = 0
+    for (x, y) in loader
+        ŷ = onecold(Array(first(model(x, ps, st))), 0:9)
+        yᵗ = onecold(y, 0:9)
+        correct += sum(ŷ .== yᵗ)
+        total   += length(yᵗ)
     end
-    return total_correct / total
+    return correct / total
 end
 
 #===== TRAINING =====#
@@ -71,27 +71,55 @@ mkpath("./mnist/Lux MLP trained models")
 ### Lets train the model
 nepochs = 10
 train_accuracy, test_accraucy = 0.1, 0.1
+
+save_dir = joinpath("mnist", "trained_models")
+mkpath(save_dir)
+
 for epoch in 1:nepochs
-    ### Training Loop
-    stime = time()
+    t_start = time()
     for (x, y) in train_dataloader
+        # train_state = single_train_step!(vjp, lossfn, (x, y), train_state)
         _, _, _, train_state = Training.single_train_step!(
             vjp, lossfn, (x, y), train_state,
         )
     end
-    ttime = time() - stime
+    epoch_time = time() - t_start
 
-    # Collect Post Training statistics, such as accuracy
-    train_accuracy = accuracy(model, train_state.parameters, train_state.states, train_dataloader) * 100
-    test_accraucy = accuracy(model, train_state.parameters, train_state.states, test_dataloader) * 100
+    train_acc = accuracy_score(model, train_state.parameters, train_state.states, train_dataloader) * 100
+    test_acc  = accuracy_score(model, train_state.parameters, train_state.states, test_dataloader ) * 100
 
-    @printf "[%2d/%2d] \t Time %.2fs \t Training Accuracy: %.2f%% \t Test Accuracy: %.2f%%\n" epoch nepochs ttime train_accuracy test_accraucy
+    @printf "[%2d/%2d]  %.2fs  train: %.2f%%  test: %.2f%%\n" epoch nepochs epoch_time train_acc test_acc
 
-    trained_parameters, trained_states = deepcopy(train_state.parameters), deepcopy(train_state.states)
     if epoch % 5 == 0
-        @save "./mnist/Lux MLP trained models/MLP_trained_model_$(epoch).jld2" trained_parameters trained_states
-        println("saved to ", "trained_model_$(epoch).jld2")
+        checkpoint = joinpath(save_dir, "MLP_epoch_$(lpad(epoch,2,'0')).jld2")
+        JLD2.save(
+            checkpoint,                # ← function API avoids macro issues
+            "trained_parameters", train_state.parameters,
+            "trained_states",     train_state.states
+        )
+        println("  ↳ checkpoint saved → " * checkpoint)
     end
 end
-
 # HW TODO is to load trained models and use them for testing on the test dataset again and calcualte the balanced_accuracy instead of Accuracy.
+
+function balanced_accuracy(model, ps, st, loader)
+    st = Lux.testmode(st)
+    preds = Int[]; targets = Int[]
+    for (x, y) in loader
+        append!(preds  , onecold(Array(first(model(x, ps, st))), 0:9))
+        append!(targets, onecold(y, 0:9))
+    end
+    recalls = [sum((preds .== c) .& (targets .== c)) / max(sum(targets .== c), 1)
+        for c in 0:9]
+    return mean(recalls)
+end
+
+for epoch in 5:5:nepochs
+    checkpoint = joinpath(save_dir, "MLP_epoch_$(lpad(epoch,2,'0')).jld2")
+    if isfile(checkpoint)
+        data = JLD2.load(checkpoint)                    # returns Dict{String,Any}
+        bal_acc = balanced_accuracy(model, data["trained_parameters"], data["trained_states"], test_dataloader) * 100
+        @printf "Balanced accuracy (epoch %2d): %.2f%%
+" epoch bal_acc
+    end
+end
