@@ -160,8 +160,8 @@ addprocs(n_splits)
 		return mean(baccs)
 	end
 
-	train = CSV.read("./mnist/mnist_train.csv", DataFrame, header = 1)
-	test = CSV.read("./mnist/mnist_test.csv", DataFrame, header = 1)
+	train = CSV.read("../mnist/mnist_train.csv", DataFrame, header = 1)
+	test = CSV.read("../mnist/mnist_test.csv", DataFrame, header = 1)
 end
 
 #===== TRAINING =====#
