@@ -143,3 +143,51 @@ mode.(ŷ)
 
 
 #HW TODO - Evaluate your LogisticClassifier using 10-folds
+using MLJ
+using MLJTuning
+using DataFrames, Statistics
+import RDatasets: dataset
+import MLJ: predict_mode
+
+# Load model
+LogisticClassifier = @load LogisticClassifier pkg=MLJLinearModels verbosity=0
+
+# Load dataset
+data = dataset("ISLR", "Smarket")
+X = select(data, [:Lag1, :Lag2])
+y = coerce(data.Direction, OrderedFactor)
+
+# Define model
+model = LogisticClassifier()
+
+# Define range for lambda
+range_lambda = range(model, :lambda, lower=1e-3, upper=1.0, scale=:log)
+
+# Setup tuning with 10-fold CV and grid search
+tm = TunedModel(
+    model = model,
+    tuning = Grid(resolution=10),
+    resampling = CV(nfolds=10, shuffle=true, rng=42),
+    measure = accuracy,
+    operation = predict_mode,
+    range = range_lambda
+)
+
+mach = machine(tm, X, y)
+fit!(mach)
+
+# Extract best model and results
+best_model = fitted_params(mach).best_model
+best_lambda = best_model.lambda
+
+rpt = report(mach)
+cv_scores = rpt.plotting.measurements
+
+mean_acc = round(mean(cv_scores), sigdigits=4)
+std_acc = round(std(cv_scores), sigdigits=4)
+
+println("Best lambda: ", best_lambda)
+println("10-Fold CV Accuracy: ", mean_acc, " ± ", std_acc)
+println("Fold-wise Accuracies: ", cv_scores)
+
+

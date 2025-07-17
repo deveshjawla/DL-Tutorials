@@ -168,4 +168,76 @@ best_models_mse_std = std(rep.best_history_entry.per_fold[1])^2
 
 # Question - How can we use linear regression for classification?
 
+using MLJ
+# import Pkg; Pkg.add("MLJModels")
+using MLJModels
+import RDatasets: dataset
+import DataFrames: DataFrame, select, Not
+import MLJLinearModels
+using Statistics
 
+# Load required models
+@load RidgeRegressor pkg=MLJLinearModels
+@load Standardizer pkg=MLJModels
+
+# Load dataset
+auto = dataset("ISLR", "Auto")
+y, X = unpack(auto, ==(:MPG))
+
+# Remove non-numeric column
+X = select(X, Not(:Name))
+
+# Train-test split
+train, test = partition(eachindex(y), 0.7, shuffle=true, rng=123)
+
+# --- Create polynomial features ---
+function create_poly_features(df::DataFrame, max_degree::Int=3)::DataFrame
+    poly_df = DataFrame()
+    for col in names(df)
+        vals = df[!, col]
+        for degree in 1:max_degree
+            poly_df[!, Symbol("$(col)_$degree")] = vals .^ degree
+        end
+    end
+    return poly_df
+end
+
+X_poly = create_poly_features(X, 3)
+
+# --- Define pipeline ---
+pipe = Pipeline(
+    Standardizer(),
+    FeatureSelector(features=[:Horsepower_1]),  # placeholder, gets tuned
+    RidgeRegressor(lambda=0.1)
+)
+
+# --- Define tuning ranges ---
+all_features = names(X_poly)
+feature_cases = [Symbol.(all_features[1:i]) for i in 1:min(10, length(all_features))]
+
+feature_range = range(pipe, :(feature_selector.features), values=feature_cases)
+lambda_range = range(pipe, :(ridge_regressor.lambda), lower=1e-3, upper=10.0, scale=:log)
+
+# --- Define tuned model ---
+tuned_model = TunedModel(
+    model=pipe,
+    tuning=Grid(resolution=3),
+    resampling=CV(nfolds=5),
+    range=[feature_range, lambda_range],
+    measure=rms
+)
+
+# --- Train model ---
+mach = machine(tuned_model, X_poly, y)
+fit!(mach, verbosity=1)
+
+# --- Evaluate ---
+rep = report(mach)
+best_model = fitted_params(mach).best_model
+
+y_pred = predict(mach, X_poly[test, :])
+final_mse = mean((y_pred .- y[test]).^2)
+
+println("Best features: ", best_model.feature_selector.features)
+println("Best lambda: ", best_model.ridge_regressor.lambda)
+println("Final MSE on test set: ", round(final_mse, sigdigits=5))

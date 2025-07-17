@@ -91,3 +91,52 @@ end
 # So 4 PCA features are enough to recover most of the variance.
 
 ### HW TODO - Test the performance using LogisticClassifier and compare the performance on PCA features and the original set of features
+using MLJ
+using MLJTuning
+import RDatasets: dataset
+using DataFrames, Statistics
+import MLJ: predict_mode
+
+data = dataset("ISLR", "OJ")
+y = coerce(data.Purchase, Multiclass)
+
+feature_names = [
+    :PriceCH, :PriceMM, :DiscCH, :DiscMM, :SalePriceMM, :SalePriceCH,
+    :PriceDiff, :PctDiscMM, :PctDiscCH
+]
+X = select(data, feature_names)
+
+LogisticClassifier = @load LogisticClassifier pkg=MLJLinearModels verbosity=0
+model = LogisticClassifier()
+
+mach_orig = machine(model, X, y)
+res_orig = evaluate!(
+    mach_orig,
+    resampling=CV(nfolds=5, shuffle=true, rng=42),
+    operation=predict_mode,
+    measure=accuracy
+)
+
+acc_orig = round(mean(res_orig.measurement), sigdigits=4)
+std_orig = round(std(res_orig.measurement), sigdigits=4)
+
+PCA = @load PCA pkg=MultivariateStats verbosity=0
+SPCA = Pipeline(Standardizer(), PCA(maxoutdim=5))
+pca_machine = machine(SPCA, X)
+fit!(pca_machine)
+X_pca = MLJ.transform(pca_machine, X)
+
+mach_pca = machine(model, X_pca, y)
+res_pca = evaluate!(
+    mach_pca,
+    resampling=CV(nfolds=5, shuffle=true, rng=42),
+    operation=predict_mode,
+    measure=accuracy
+)
+
+acc_pca = round(mean(res_pca.measurement), sigdigits=4)
+std_pca = round(std(res_pca.measurement), sigdigits=4)
+
+println("LogisticClassifier 5-Fold CV Results:")
+println("Original Features:     Accuracy = $acc_orig ± $std_orig")
+println("PCA (5 components):    Accuracy = $acc_pca ± $std_pca")
